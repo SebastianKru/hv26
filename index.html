@@ -1,0 +1,476 @@
+<title>Haus Obersteinbach Begehung</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Vollbild-3D-App: Leinwand füllt alles, schmale Bedienleiste oben links, Hilfe unten */
+:root{
+  --bg:#dfe7ea; --panel:rgba(250,248,243,.92); --ink:#22282a; --muted:#5d6a6e; --accent:#2f6f5e; --accent-ink:#fff; --line:rgba(34,40,42,.14);
+  --f-ui:"IBM Plex Sans","Segoe UI",system-ui,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15191a;--panel:rgba(28,33,34,.9);--ink:#e8ecea;--muted:#a3b0ad;--accent:#6fbfa6;--accent-ink:#0f1413;--line:rgba(232,236,234,.16);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#15191a;--panel:rgba(28,33,34,.9);--ink:#e8ecea;--muted:#a3b0ad;--accent:#6fbfa6;--accent-ink:#0f1413;--line:rgba(232,236,234,.16);color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);overflow:hidden}
+#app{position:fixed;inset:0}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+.bar{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));max-width:min(560px,calc(100% - 32px));
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;backdrop-filter:blur(6px)}
+.bar h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.01em}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.lab{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-right:2px}
+button{font:inherit;font-size:13px;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:7px;padding:5px 9px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#vr{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+#vr[disabled]{opacity:.55;cursor:default}
+.help{position:fixed;bottom:calc(12px + env(safe-area-inset-bottom,0px));left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));
+  font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;max-width:760px}
+.help kbd{font-family:var(--f-mono);font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--ink)}
+#status{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+#cross{position:fixed;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.5);pointer-events:none;opacity:.8}
+#toast{position:fixed;left:50%;top:calc(70px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none}
+#toast.on{opacity:1}
+@media (max-width:520px){.help{display:none}}
+@media (prefers-reduced-motion: reduce){#toast{transition:none}}
+</style>
+<div id="app"></div>
+<div id="cross" hidden></div>
+<div class="bar" id="bar">
+  <h1>Haus Obersteinbach – Begehung</h1>
+  <div class="row" id="vars"><span class="lab">EG Süd</span></div>
+  <div class="row">
+    <button id="openAll" type="button">Alle Türen &amp; Fenster öffnen</button>
+    <button id="closeAll" type="button">Alle schließen</button>
+    <button id="vr" type="button" disabled>VR wird geprüft …</button>
+  </div>
+  <div class="row"><span id="status">Modell wird geladen …</span>
+    <label id="pick" hidden style="font-size:13px;border:1px solid var(--accent);border-radius:7px;padding:5px 9px;cursor:pointer">haus.glb (+ palette.json) wählen
+      <input id="pickIn" type="file" accept=".glb,.json" multiple hidden></label></div>
+</div>
+<div class="help" id="help">
+  <b>PC:</b> ins Bild klicken · <kbd>W A S D</kbd> gehen · Maus schauen · <kbd>Shift</kbd> schneller · <kbd>E</kbd> / Linksklick Tür oder Fenster öffnen · <kbd>T</kbd> / Rechtsklick teleportieren · <kbd>1</kbd>–<kbd>4</kbd> Variante · frei durch Wände · <kbd>Esc</kbd> Maus frei.
+  <b>Quest:</b> linker Stick gehen · rechter Stick nach vorn = Teleport-Bogen, zur Seite = drehen · Trigger = Tür/Fenster · <kbd>A</kbd>/<kbd>X</kbd> nächste Variante.
+</div>
+<div id="toast"></div>
+<script type="importmap">{"imports":{
+ "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+ "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+ "three-mesh-bvh":"https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.6/build/index.module.js"}}</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+let BVH = null;
+try { BVH = await import("three-mesh-bvh"); } catch (e) { console.warn("BVH nicht geladen", e); }
+if (BVH) {
+  THREE.BufferGeometry.prototype.computeBoundsTree = BVH.computeBoundsTree;
+  THREE.BufferGeometry.prototype.disposeBoundsTree = BVH.disposeBoundsTree;
+  THREE.Mesh.prototype.raycast = BVH.acceleratedRaycast;
+}
+
+// ---------- Grundgerüst
+const $ = (id) => document.getElementById(id);
+const status = (t) => { $("status").textContent = t; };
+const toast = (t) => { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 2200); };
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local-floor");
+$("app").appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbfd6e2);
+scene.add(new THREE.HemisphereLight(0xeaf3ff, 0x6b6250, 1.35));
+const sun = new THREE.DirectionalLight(0xfff1dc, 2.1); sun.position.set(-30, 45, 25); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xdfe9ff, 0.45); fill.position.set(25, 18, -20); scene.add(fill);
+const rig = new THREE.Group(); scene.add(rig);                       // Füße des Betrachters
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 600);
+camera.position.set(0, 1.65, 0); rig.add(camera);
+addEventListener("resize", () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// ---------- prozedurale Oberflächen (Weltkoordinaten-Projektion, keine UVs nötig)
+function canvasTex(draw, size = 512) {
+  const c = document.createElement("canvas"); c.width = c.height = size; const g = c.getContext("2d"); draw(g, size);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const TEX = {
+  wood: canvasTex((g, s) => {                         // 4 Bretter à 14,5 cm, Maserung längs (senkrecht)
+    g.fillStyle = "#e9d2ad"; g.fillRect(0, 0, s, s); const w = s / 4;
+    for (let i = 0; i < 4; i++) {
+      const L = 0.9 + rnd() * 0.18; g.fillStyle = `rgba(${200 * L | 0},${160 * L | 0},${110 * L | 0},.35)`; g.fillRect(i * w, 0, w, s);
+      for (let k = 0; k < 26; k++) { g.strokeStyle = `rgba(120,80,40,${0.05 + rnd() * 0.12})`; g.lineWidth = 0.6 + rnd() * 1.6; const x = i * w + rnd() * w; g.beginPath(); g.moveTo(x, 0);
+        for (let y = 0; y <= s; y += 32) g.lineTo(x + Math.sin(y / 60 + k) * 3 * rnd(), y); g.stroke(); }
+      if (rnd() > 0.4) { g.fillStyle = "rgba(110,70,35,.45)"; g.beginPath(); g.ellipse(i * w + w * (0.3 + rnd() * 0.4), rnd() * s, 4 + rnd() * 5, 6 + rnd() * 8, 0, 0, 6.3); g.fill(); }
+      g.fillStyle = "rgba(70,45,25,.45)"; g.fillRect(i * w, 0, 1.5, s);
+    }
+  }),
+  tile: canvasTex((g, s) => {                         // Solnhofener Platten 40 × 40
+    g.fillStyle = "#efe7d6"; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { const L = 0.94 + rnd() * 0.1; g.fillStyle = `rgba(${236 * L | 0},${226 * L | 0},${204 * L | 0},1)`; g.fillRect(i * s / 2 + 2, j * s / 2 + 2, s / 2 - 4, s / 2 - 4);
+      for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(150,130,100,${rnd() * 0.12})`; g.beginPath(); g.arc(i * s / 2 + rnd() * s / 2, j * s / 2 + rnd() * s / 2, 2 + rnd() * 9, 0, 6.3); g.fill(); } }
+    g.fillStyle = "rgba(150,140,125,.8)"; g.fillRect(0, 0, s, 3); g.fillRect(0, 0, 3, s); g.fillRect(0, s / 2 - 2, s, 4); g.fillRect(s / 2 - 2, 0, 4, s);
+  }),
+  plaster: canvasTex((g, s) => { g.fillStyle = "#f3efe7"; g.fillRect(0, 0, s, s); for (let k = 0; k < 4000; k++) { g.fillStyle = `rgba(${rnd() > .5 ? 255 : 160},${rnd() > .5 ? 250 : 150},${rnd() > .5 ? 240 : 130},.06)`; g.fillRect(rnd() * s, rnd() * s, 2, 2); } }),
+  grass: canvasTex((g, s) => { g.fillStyle = "#7d9a55"; g.fillRect(0, 0, s, s); for (let k = 0; k < 9000; k++) { const l = 70 + rnd() * 80; g.fillStyle = `rgba(${l * .7 | 0},${l + 30 | 0},${l * .45 | 0},.35)`; g.fillRect(rnd() * s, rnd() * s, 1.5, 3); } }),
+  roof: canvasTex((g, s) => { g.fillStyle = "#5d5a57"; g.fillRect(0, 0, s, s); for (let j = 0; j < 8; j++) { g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(0, j * s / 8, s, 3); for (let i = 0; i < 4; i++) g.fillRect(i * s / 4 + (j % 2) * s / 8, j * s / 8, 2, s / 8); } }),
+};
+function triplanar(mat, tex, scale) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.tTri = { value: tex }; sh.uniforms.triScale = { value: scale };
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vWP; varying vec3 vWN;")
+      .replace("#include <project_vertex>", "#include <project_vertex>\nvWP=(modelMatrix*vec4(transformed,1.0)).xyz; vWN=normalize(mat3(modelMatrix)*objectNormal);");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vWP; varying vec3 vWN; uniform sampler2D tTri; uniform float triScale;")
+      .replace("#include <map_fragment>", "vec3 bw=pow(abs(normalize(vWN)),vec3(4.0)); bw/=(bw.x+bw.y+bw.z);\n vec3 tx=texture2D(tTri,vWP.zy*triScale).rgb*bw.x+texture2D(tTri,vec2(vWP.x,vWP.z*0.999)*triScale).rgb*bw.y+texture2D(tTri,vWP.xy*triScale).rgb*bw.z;\n diffuseColor.rgb*=tx*1.15;");
+  };
+  mat.customProgramCacheKey = () => "tri" + tex.uuid + scale;
+}
+const matCache = new Map();
+let PAL = {};
+function makeMat(name) {
+  if (matCache.has(name)) return matCache.get(name);
+  const n = (name || "").toLowerCase(); const p = PAL[name] || [0.8, 0.8, 0.8, 1];
+  const col = new THREE.Color().setRGB(p[0], p[1], p[2], THREE.LinearSRGBColorSpace);
+  let m;
+  if (/verglas|glas|glass/.test(n)) m = new THREE.MeshStandardMaterial({ color: 0xcfe6ef, transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.1, depthWrite: false });
+  else {
+    m = new THREE.MeshStandardMaterial({ color: col, roughness: 0.85, metalness: /edelstahl|metall|alu/.test(n) ? 0.5 : 0.0 });
+    if (/fichte|holz|douglas|lärche|larche|buche|eiche|diele|schlossdiel|treppe|parkett|wood|plank|massivholz/.test(n)) { m.color.lerp(new THREE.Color(1, 1, 1), 0.25); triplanar(m, TEX.wood, 1 / 0.58); }
+    else if (/solnhof|fliese|tile|naturstein|pflaster/.test(n)) { m.color.lerp(new THREE.Color(1, 1, 1), 0.3); triplanar(m, TEX.tile, 1 / 0.8); }
+    else if (/putz|lehm|plaster|gips/.test(n)) triplanar(m, TEX.plaster, 1 / 1.2);
+    else if (/gelände|gelande|rasen|wiese|gras|dgm|terrain/.test(n)) { m.color.lerp(new THREE.Color(0.55, 0.7, 0.35), 0.5); triplanar(m, TEX.grass, 1 / 2.0); }
+    else if (/dach|roof|pfanne/.test(n)) triplanar(m, TEX.roof, 1 / 2.4);
+  }
+  if (p[3] < 0.99 && !m.transparent) { m.transparent = true; m.opacity = Math.max(0.15, p[3]); m.depthWrite = false; }
+  m.side = THREE.DoubleSide; m.name = name; matCache.set(name, m); return m;
+}
+
+// ---------- Laden
+let VARIANT = "3.3"; try { VARIANT = localStorage.getItem("haus.var") || "3.3"; } catch (e) {}
+const VARS = [["3.0", "3.0 Original K.-P."], ["3.1", "3.1 aktuell"], ["3.2", "3.2 Bad Süd"], ["3.3", "3.3 Kombi"]];
+const groups = [];          // {mesh, var, walk}
+const leaves = [];          // {obj, ex, t, target, q0, p0, axisAng, slide}
+const walkSet = [], blockSet = [], interSet = [], frameSet = [];
+let GHOST = false; try { GHOST = localStorage.getItem("haus.ghost") === "1"; } catch (e) {}
+const frameToLeaves = new Map();
+const baseName = (n) => n.replace(/__leaf\d+$/, "").replace(/\.\d{3}$/, "");
+function visFor(v) { return v === "" || v === undefined || (v === "!3.3" ? VARIANT !== "3.3" : v === VARIANT); }
+
+function pickFiles() {
+  return new Promise((res) => {
+    $("pick").hidden = false; status("Modelldatei nicht gefunden –");
+    $("pickIn").onchange = async () => {
+      let glb = null;
+      for (const f of $("pickIn").files) {
+        if (f.name.endsWith(".json")) { try { PAL = JSON.parse(await f.text()); } catch (e) {} }
+        else if (f.name.endsWith(".glb")) glb = await f.arrayBuffer();
+      }
+      if (glb) { $("pick").hidden = true; res(glb); }
+    };
+  });
+}
+async function load() {
+  try { PAL = await (await fetch("palette.json")).json(); } catch (e) { PAL = {}; }
+  let gltf;
+  try {
+    gltf = await new Promise((res, rej) => new GLTFLoader().load("haus.glb", res, (ev) => {
+      if (ev.total) status(`Modell wird geladen … ${Math.round(ev.loaded / ev.total * 100)} %`);
+    }, rej));
+  } catch (e) {
+    let buf = null;
+    try {                                   // gepackte Fassung (gzip + base64) – so liegt das Modell im Claude-Artefakt
+      status("Modell wird geladen …");
+      const r = await fetch("haus-modell.txt"); if (!r.ok) throw new Error(r.status);
+      const b64 = (await r.text()).trim(); const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      buf = await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+    } catch (e2) { console.warn("gepacktes Modell nicht verfügbar", e2); }
+    if (!buf) buf = await pickFiles();
+    status("Modell wird aufbereitet …");
+    gltf = await new Promise((res, rej) => new GLTFLoader().parse(buf, "", res, rej));
+  }
+  status("Modell wird aufbereitet …");
+  gltf.scene.updateMatrixWorld(true);
+  const buckets = new Map();
+  const leafNodes = [];
+  gltf.scene.traverse((o) => {
+    if (!o.isMesh) return;
+    let node = o; let ex = o.userData || {};
+    while (node && (ex.var === undefined && ex.walk === undefined) && node.parent) { node = node.parent; ex = { ...node.userData, ...ex }; }
+    const own = o.parent && o.parent.userData && Object.keys(o.parent.userData).length ? { ...o.parent.userData, ...o.userData } : ex;
+    if (own.leaf) { const ln = o.userData.leaf ? o : o.parent; leafNodes.push([o, own, ln]); return; }
+    const v = own.var || ""; const walk = own.walk ? 1 : (own.frame ? 2 : 0);
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    const g0 = o.geometry; const geom = g0.index ? g0 : g0.setIndex([...Array(g0.attributes.position.count).keys()]);
+    const groupsOf = g0.groups && g0.groups.length ? g0.groups : [{ start: 0, count: geom.index.count, materialIndex: 0 }];
+    for (const gr of groupsOf) {
+      const mname = mats[gr.materialIndex || 0]?.name || "";
+      const sub = new THREE.BufferGeometry();
+      sub.setAttribute("position", geom.attributes.position); sub.setAttribute("normal", geom.attributes.normal || new THREE.BufferAttribute(new Float32Array(geom.attributes.position.count * 3), 3));
+      sub.setIndex(Array.from(geom.index.array.slice(gr.start, gr.start + gr.count)));
+      const g2 = sub.toNonIndexed(); g2.applyMatrix4(o.matrixWorld);
+      if (!geom.attributes.normal) g2.computeVertexNormals();
+      const key = v + "|" + walk + "|" + mname; if (!buckets.has(key)) buckets.set(key, { v, walk, mname, list: [] }); buckets.get(key).list.push(g2);
+    }
+  });
+  for (const b of buckets.values()) {
+    let g; try { g = mergeGeometries(b.list.map((x) => { for (const k of Object.keys(x.attributes)) if (k !== "position" && k !== "normal") x.deleteAttribute(k); return x; }), false); } catch (e) { console.warn(e); continue; }
+    if (!g) continue;
+    if (g.computeBoundsTree) g.computeBoundsTree();
+    const mesh = new THREE.Mesh(g, makeMat(b.mname)); mesh.matrixAutoUpdate = false;
+    mesh.userData = { var: b.v, walk: b.walk, glass: !!mesh.material.transparent };
+    scene.add(mesh); groups.push(mesh);
+    (b.walk === 1 ? walkSet : b.walk === 2 ? frameSet : blockSet).push(mesh);
+  }
+  const leafByNode = new Map();                            // ein Flügel = ein glTF-Knoten (alle Materialteile: Holz, Glas, Griff …)
+  for (const [o, ex, ln] of leafNodes) {
+    let L = leafByNode.get(ln);
+    if (!L) {
+      const wp = new THREE.Vector3(), wq = new THREE.Quaternion(), ws = new THREE.Vector3(); ln.matrixWorld.decompose(wp, wq, ws);
+      const g = new THREE.Group(); g.position.copy(wp); g.quaternion.copy(wq); g.scale.copy(ws); scene.add(g);
+      const bn = baseName(ln.name);
+      L = { obj: g, var: ex.var || "", t: 0, target: 0, q0: wq.clone(), p0: wp.clone(), open: ex.open || "swing", ang: (ex.ang || 85) * Math.PI / 180,
+        slide: ex.slide ? new THREE.Vector3(ex.slide[0], ex.slide[2], -ex.slide[1]) : null, name: bn, inv: ln.matrixWorld.clone().invert() };
+      leafByNode.set(ln, L); leaves.push(L);
+      if (!frameToLeaves.has(bn)) frameToLeaves.set(bn, []); frameToLeaves.get(bn).push(L);
+    }
+    const mats = Array.isArray(o.material) ? o.material.map((m) => makeMat(m.name)) : makeMat(o.material.name);
+    const m = new THREE.Mesh(o.geometry, mats);
+    new THREE.Matrix4().multiplyMatrices(L.inv, o.matrixWorld).decompose(m.position, m.quaternion, m.scale);
+    if (m.geometry.computeBoundsTree) m.geometry.computeBoundsTree();
+    m.userData = { leaf: L, var: L.var }; L.obj.add(m); interSet.push(m);
+  }
+  applyVariant();
+  spawn();
+  status(`${groups.length + leaves.length} Teile · ${leaves.length} bewegliche Flügel`);
+}
+
+// ---------- Varianten
+function applyVariant() {
+  for (const m of groups) m.visible = visFor(m.userData.var);
+  for (const L of leaves) L.obj.visible = visFor(L.var);
+  for (const b of document.querySelectorAll("#vars button")) b.setAttribute("aria-pressed", b.dataset.v === VARIANT ? "true" : "false");
+  try { localStorage.setItem("haus.var", VARIANT); } catch (e) {}
+  vrLabel(VARS.find((x) => x[0] === VARIANT)[1]);
+}
+for (const [v, lab] of VARS) {
+  const b = document.createElement("button"); b.type = "button"; b.textContent = lab; b.dataset.v = v; b.setAttribute("aria-pressed", "false");
+  b.onclick = () => { VARIANT = v; applyVariant(); toast("EG-Variante " + lab); }; $("vars").appendChild(b);
+}
+function nextVariant(d = 1) { const i = VARS.findIndex((x) => x[0] === VARIANT); VARIANT = VARS[(i + d + VARS.length) % VARS.length][0]; applyVariant(); toast("EG-Variante " + VARS.find((x) => x[0] === VARIANT)[1]); }
+
+// ---------- Raycasts
+const ray = new THREE.Raycaster(); ray.firstHitOnly = false;
+const vis = (arr) => arr.filter((m) => m.visible && (!m.parent || m.parent === scene || m.parent.visible));
+const DOWN = new THREE.Vector3(0, -1, 0), UP = new THREE.Vector3(0, 1, 0);
+function groundAt(p, from = 0.6, maxDrop = 4) {          // höchster begehbarer Boden unter p
+  ray.set(new THREE.Vector3(p.x, p.y + from, p.z), DOWN); ray.far = from + maxDrop;
+  for (const hw of ray.intersectObjects(vis(walkSet), false)) {
+    const n = hw.face ? hw.face.normal.clone().transformDirection(hw.object.matrixWorld) : UP;
+    if (Math.abs(n.y) > 0.6) return hw.point.y;
+  }
+  return null;
+}
+function blocked(from, dir, dist) {
+  for (const h of [0.45, 1.15]) {
+    ray.set(new THREE.Vector3(from.x, from.y + h, from.z), dir); ray.far = dist;
+    const hit = ray.intersectObjects(vis(blockSet), false)[0];
+    if (hit) return hit;
+  }
+  return null;
+}
+function headroomOK(p) { ray.set(new THREE.Vector3(p.x, p.y + 0.08, p.z), UP); ray.far = 1.9; return !ray.intersectObjects(vis(blockSet).concat(vis(walkSet)), false).length; }
+function teleportTarget(origin, dir) {                    // gerader Strahl (PC) – nur begehbare Böden, Platz nach oben
+  ray.set(origin, dir); ray.far = 60;
+  const hits = ray.intersectObjects(vis(walkSet).concat(vis(blockSet), vis(interSet)), false);
+  const h = hits[0]; if (!h) return null;
+  if (!h.object.userData.walk) return null;
+  const n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : UP;
+  if (Math.abs(n.y) < 0.7) return null;
+  if (!headroomOK(h.point)) return null;
+  return h.point.clone();
+}
+
+// ---------- Bewegung mit Bodenhaftung und Kollision
+const move = new THREE.Vector3();
+function tryMove(delta) {                                 // frei gehen: keine Wände, keine Kanten – nur auf dem Boden bleiben
+  const d = delta.clone(); d.y = 0; if (d.length() < 1e-5) return;
+  rig.position.x += d.x; rig.position.z += d.z;
+  const head = new THREE.Vector3(); camera.getWorldPosition(head);
+  const gy = groundAt(new THREE.Vector3(head.x, rig.position.y, head.z), 0.5, 0.8);   // Stufen und Treppen mitnehmen
+  if (gy !== null) rig.position.y = gy;                    // sonst Höhe halten (in Wänden, über Öffnungen)
+}
+function settle() {                                        // auch bei echtem Gehen im Raum (Quest) am Boden bleiben
+  const head = new THREE.Vector3(); camera.getWorldPosition(head);
+  const gy = groundAt(new THREE.Vector3(head.x, rig.position.y, head.z), 0.45, 0.6);
+  if (gy !== null) rig.position.y += (gy - rig.position.y) * 0.35;
+}
+function spawn() {
+  rig.position.set(6.3, 0, 2.2);                           // Südgarten, Blick nach Norden aufs Haus
+  const gy = groundAt(new THREE.Vector3(6.3, 20, 2.2), 0, 40); rig.position.y = gy ?? -1.2; rig.rotation.y = 0;
+}
+
+// ---------- Türen und Fenster
+function toggleLeaf(L, force) { L.target = force !== undefined ? force : (L.target > 0.5 ? 0 : 1); }
+function toggleByHit(obj) {
+  const L = obj.userData.leaf; if (!L) return false;
+  const sib = frameToLeaves.get(L.name) || [L]; const tgt = L.target > 0.5 ? 0 : 1; for (const s of sib) toggleLeaf(s, tgt); return true;
+}
+const qTmp = new THREE.Quaternion();
+function animateLeaves(dt) {
+  for (const L of leaves) {
+    if (L.t === L.target) continue;
+    L.t += Math.sign(L.target - L.t) * dt / 0.7; L.t = Math.min(1, Math.max(0, L.t));
+    applyLeaf(L);
+  }
+}
+function applyLeaf(L) {
+  const e = L.t * L.t * (3 - 2 * L.t);
+  if (L.open === "slide" && L.slide) L.obj.position.copy(L.p0).addScaledVector(L.slide, e);
+  else { qTmp.setFromAxisAngle(UP, L.ang * e); L.obj.quaternion.copy(qTmp).multiply(L.q0); }
+}
+function setGhost(v) {}
+$("openAll").onclick = () => { for (const L of leaves) toggleLeaf(L, 1); toast("Alle Türen und Fenster offen"); };
+$("closeAll").onclick = () => { for (const L of leaves) toggleLeaf(L, 0); toast("Alles geschlossen"); };
+function interactFrom(origin, dir) {
+  ray.set(origin, dir); ray.far = 3.0;
+  const h = ray.intersectObjects(vis(interSet).concat(vis(blockSet), vis(frameSet)), false)[0];
+  if (h && h.object.userData.leaf) { toggleByHit(h.object); return true; }
+  if (h) {                                                 // Rahmen getroffen → nächster Flügel in 0,8 m
+    let best = null, bd = 0.8; for (const L of leaves) { if (!L.obj.visible) continue; const d = L.obj.position.distanceTo(h.point); if (d < bd) { bd = d; best = L; } }
+    if (best) { toggleByHit(best.obj); return true; }
+  }
+  return false;
+}
+
+// ---------- PC-Steuerung
+const keys = {}; let yaw = 0, pitch = 0, locked = false;
+addEventListener("keydown", (e) => {
+  keys[e.code] = true;
+  if (e.code === "KeyE") { const o = new THREE.Vector3(), d = new THREE.Vector3(); camera.getWorldPosition(o); camera.getWorldDirection(d); interactFrom(o, d); }
+  if (e.code === "KeyT") deskTeleport();
+  if (/^Digit[1-4]$/.test(e.code)) { VARIANT = VARS[+e.code.slice(5) - 1][0]; applyVariant(); toast("EG-Variante " + VARS.find((x) => x[0] === VARIANT)[1]); }
+});
+addEventListener("keyup", (e) => { keys[e.code] = false; });
+const cv = renderer.domElement;
+cv.addEventListener("click", () => { if (!locked && !renderer.xr.isPresenting) cv.requestPointerLock?.()?.catch?.(() => {}); });
+cv.addEventListener("contextmenu", (e) => e.preventDefault());
+cv.addEventListener("mousedown", (e) => {
+  if (!locked) return;
+  if (e.button === 0) { const o = new THREE.Vector3(), d = new THREE.Vector3(); camera.getWorldPosition(o); camera.getWorldDirection(d); interactFrom(o, d); }
+  if (e.button === 2) deskTeleport();
+});
+document.addEventListener("pointerlockchange", () => { locked = document.pointerLockElement === cv; $("cross").hidden = !locked; });
+addEventListener("mousemove", (e) => { if (!locked) return; yaw -= e.movementX * 0.0022; pitch = Math.max(-1.45, Math.min(1.45, pitch - e.movementY * 0.0022)); });
+// Touch: ziehen = schauen, zwei Finger = gehen
+let tp = null; cv.addEventListener("touchstart", (e) => { tp = [...e.touches].map((t) => [t.clientX, t.clientY]); }, { passive: true });
+cv.addEventListener("touchmove", (e) => { const n = [...e.touches].map((t) => [t.clientX, t.clientY]); if (tp && n.length === 1) { yaw -= (n[0][0] - tp[0][0]) * 0.005; pitch = Math.max(-1.4, Math.min(1.4, pitch - (n[0][1] - tp[0][1]) * 0.005)); } if (n.length === 2) keys.Touch = true; tp = n; }, { passive: true });
+cv.addEventListener("touchend", () => { keys.Touch = false; tp = null; }, { passive: true });
+function deskTeleport() {
+  const o = new THREE.Vector3(), d = new THREE.Vector3(); camera.getWorldPosition(o); camera.getWorldDirection(d);
+  const t = teleportTarget(o, d); if (t) { rig.position.copy(t); toast("Teleportiert"); } else toast("Dort kann man nicht stehen");
+}
+
+// ---------- VR (Quest)
+const vrBtn = $("vr");
+async function setupVR() {
+  if (!navigator.xr) { vrBtn.textContent = "VR: Browser ohne WebXR"; return; }
+  let ok = false; try { ok = await navigator.xr.isSessionSupported("immersive-vr"); } catch (e) { ok = false; }
+  if (!ok) { vrBtn.textContent = "VR hier nicht verfügbar"; return; }
+  vrBtn.disabled = false; vrBtn.textContent = "In VR betreten";
+  vrBtn.onclick = async () => {
+    try {
+      const s = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local-floor", "bounded-floor"] });
+      renderer.xr.setSession(s); camera.position.set(0, 0, 0); s.addEventListener("end", () => { camera.position.set(0, 1.65, 0); });
+    } catch (e) { toast("VR konnte nicht starten: " + (e.message || e)); }
+  };
+}
+setupVR();
+const ctrls = [0, 1].map((i) => {
+  const c = renderer.xr.getController(i); rig.add(c);
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 }));
+  line.scale.z = 2.5; c.add(line);
+  c.add(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.1), new THREE.MeshStandardMaterial({ color: 0x334044 })));
+  c.addEventListener("connected", (e) => { c.userData.src = e.data; });
+  c.addEventListener("selectstart", () => { const o = new THREE.Vector3(), d = new THREE.Vector3(0, 0, -1); c.getWorldPosition(o); d.applyQuaternion(c.getWorldQuaternion(new THREE.Quaternion())); if (!interactFrom(o, d)) {} });
+  return c;
+});
+// Teleport-Bogen
+const arcPts = 40; const arcGeo = new THREE.BufferGeometry().setFromPoints(Array.from({ length: arcPts }, () => new THREE.Vector3()));
+const arc = new THREE.Line(arcGeo, new THREE.LineBasicMaterial({ color: 0x6fbfa6 })); arc.visible = false; scene.add(arc);
+const ring = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.3, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x6fbfa6, side: THREE.DoubleSide })); ring.visible = false; scene.add(ring);
+let tpActive = false, tpTarget = null, snapReady = true, btnPrev = {};
+function arcTarget(c) {
+  const o = new THREE.Vector3(); c.getWorldPosition(o); const d = new THREE.Vector3(0, 0, -1).applyQuaternion(c.getWorldQuaternion(new THREE.Quaternion()));
+  const v = d.multiplyScalar(7.5); const pts = []; let p = o.clone(), hitP = null;
+  for (let i = 0; i < arcPts; i++) {
+    const n = p.clone().add(v.clone().multiplyScalar(0.05)); v.y -= 9.8 * 0.05;
+    ray.set(p, n.clone().sub(p).normalize()); ray.far = n.distanceTo(p);
+    const h = ray.intersectObjects(vis(walkSet).concat(vis(blockSet), vis(interSet)), false)[0];
+    pts.push(p.clone());
+    if (h) { const nn = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : UP;
+      if (h.object.userData.walk && nn.y > 0.7 && headroomOK(h.point)) hitP = h.point.clone(); p = h.point.clone(); pts.push(p.clone()); break; }
+    p = n;
+  }
+  while (pts.length < arcPts) pts.push(pts[pts.length - 1].clone());
+  arcGeo.setFromPoints(pts); arcGeo.attributes.position.needsUpdate = true;
+  arc.material.color.set(hitP ? 0x6fbfa6 : 0xc8553d); return hitP;
+}
+function xrInput(dt) {
+  const s = renderer.xr.getSession(); if (!s) return;
+  for (const src of s.inputSources) {
+    const gp = src.gamepad; if (!gp) continue; const ax = gp.axes; const sx = ax[2] ?? ax[0], sy = ax[3] ?? ax[1];
+    const c = ctrls.find((cc) => cc.userData.src === src) || ctrls[src.handedness === "left" ? 0 : 1];
+    if (src.handedness === "left") {                     // gehen
+      if (Math.hypot(sx, sy) > 0.15) {
+        const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+        move.copy(fwd).multiplyScalar(-sy).addScaledVector(right, sx).multiplyScalar(1.5 * dt); tryMove(move);
+      }
+    } else {                                             // teleportieren / drehen
+      if (sy < -0.6) { tpActive = true; arc.visible = true; tpTarget = arcTarget(c); ring.visible = !!tpTarget; if (tpTarget) ring.position.copy(tpTarget).add(new THREE.Vector3(0, 0.02, 0)); }
+      else if (tpActive) {
+        tpActive = false; arc.visible = false; ring.visible = false;
+        if (tpTarget) { const head = new THREE.Vector3(); camera.getWorldPosition(head); rig.position.x += tpTarget.x - head.x; rig.position.z += tpTarget.z - head.z; rig.position.y = tpTarget.y; }
+      }
+      if (Math.abs(sx) > 0.7 && snapReady && !tpActive) {
+        snapReady = false; const head = new THREE.Vector3(); camera.getWorldPosition(head); const a = -Math.sign(sx) * Math.PI / 6;
+        rig.position.sub(head).applyAxisAngle(UP, a).add(head); rig.rotation.y += a;
+      } else if (Math.abs(sx) < 0.3) snapReady = true;
+    }
+    const b = gp.buttons; const key = src.handedness;
+    const pressed = !!(b[4] && b[4].pressed); if (pressed && !btnPrev[key]) nextVariant(1); btnPrev[key] = pressed;
+  }
+}
+// Varianten-Anzeige in VR
+const lblCanvas = document.createElement("canvas"); lblCanvas.width = 512; lblCanvas.height = 96;
+const lblTex = new THREE.CanvasTexture(lblCanvas); lblTex.colorSpace = THREE.SRGBColorSpace;
+const lbl = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.094), new THREE.MeshBasicMaterial({ map: lblTex, transparent: true, depthTest: false }));
+lbl.position.set(0, -0.25, -1.1); lbl.renderOrder = 10; lbl.visible = false; camera.add(lbl);
+let lblUntil = 0;
+function vrLabel(t) { vrLabel2("EG-Variante " + t); }
+function vrLabel2(t) {
+  const g = lblCanvas.getContext("2d"); g.clearRect(0, 0, 512, 96); g.fillStyle = "rgba(20,26,27,.82)"; g.beginPath(); g.roundRect(4, 4, 504, 88, 16); g.fill();
+  g.fillStyle = "#e8ecea"; g.font = "600 38px system-ui, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(t, 256, 50);
+  lblTex.needsUpdate = true; lbl.visible = renderer.xr.isPresenting; lblUntil = performance.now() + 2500;
+}
+
+// ---------- Schleife
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(0.05, clock.getDelta());
+  if (renderer.xr.isPresenting) { xrInput(dt); settle(); if (performance.now() > lblUntil) lbl.visible = false; }
+  else {
+    rig.rotation.y = yaw; camera.rotation.x = pitch;
+    const f = (keys.KeyW || keys.ArrowUp || keys.Touch ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0), r = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+    if (f || r) {
+      const sp = (keys.ShiftLeft || keys.ShiftRight ? 3.2 : 1.5) * dt;
+      const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+      move.copy(fwd).multiplyScalar(f).addScaledVector(right, r).normalize().multiplyScalar(sp); tryMove(move);
+    }
+  }
+  animateLeaves(dt);
+  renderer.render(scene, camera);
+});
+window.__h = { rig, camera, leaves, scene, setVar: (v) => { VARIANT = v; applyVariant(); }, interactFrom, setGhost, look: (y, p) => { yaw = y; pitch = p; }, pose: (L, t) => { L.t = L.target = t; applyLeaf(L); } };
+load().catch((e) => { console.error(e); status("Laden fehlgeschlagen: " + (e.message || e)); });
+</script>
