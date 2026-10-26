@@ -49,7 +49,7 @@ button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);bor
 </div>
 <div class="help" id="help">
   <b>PC:</b> ins Bild klicken · <kbd>W A S D</kbd> gehen · Maus schauen · <kbd>Shift</kbd> schneller · <kbd>E</kbd> / Linksklick Tür oder Fenster öffnen · <kbd>T</kbd> / Rechtsklick teleportieren · <kbd>M</kbd> messen (1. Punkt, 2. Punkt) · <kbd>⌫</kbd> Maße löschen · <kbd>1</kbd>–<kbd>4</kbd> Variante · frei durch Wände · <kbd>Esc</kbd> Maus frei.
-  <b>Quest:</b> linker Stick gehen · rechter Trigger halten = zielen, loslassen = teleportieren (oder rechter Stick nach vorn) · rechter Stick zur Seite = drehen · linker Trigger = messen (1× Start, 2× festhalten, 3× neue Messung) · Greiftaste = Tür/Fenster · <kbd>A</kbd>/<kbd>X</kbd> nächste Variante · <kbd>B</kbd>/<kbd>Y</kbd> Maße löschen.
+  <b>Quest:</b> linker Stick gehen · rechter Stick nach vorn = Teleport-Strahl (Angelrute: zielen, vom Strahlende fällt die Linie auf den Boden), loslassen = springen · rechter Stick zur Seite = drehen · rechter Trigger oder Greiftaste = Tür/Fenster · linker Trigger = messen (1× Start, 2× festhalten, 3× neue Messung, max. 4 Maße) · <kbd>A</kbd>/<kbd>X</kbd> nächste Variante · <kbd>B</kbd>/<kbd>Y</kbd> Maße löschen.
 </div>
 <div id="toast"></div>
 <script type="importmap">{"imports":{
@@ -397,8 +397,7 @@ const ctrls = [0, 1].map((i) => {
   c.addEventListener("disconnected", () => { c.userData.src = null; });
   const hand = () => (c.userData.src && c.userData.src.handedness) || (i === 0 ? "left" : "right");
   // Trigger rechts: zielen + loslassen = teleportieren · Trigger links: messen · Greiftaste: Tür/Fenster
-  c.addEventListener("selectstart", () => { if (hand() === "right") { tpCtrl = c; tpActive = true; } else measureClick(...ctrlRay(c)); });
-  c.addEventListener("selectend", () => { if (hand() === "right" && tpCtrl === c) finishTeleport(); });
+  c.addEventListener("selectstart", () => { if (hand() === "right") interactFrom(...ctrlRay(c)); else measureClick(...ctrlRay(c)); });
   c.addEventListener("squeezestart", () => { interactFrom(...ctrlRay(c)); });
   return c;
 });
@@ -447,22 +446,31 @@ function measureClick(o, d) {
   const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, a]), mMat); line.renderOrder = 20;
   const dot1 = new THREE.Mesh(dotGeo, dotMat), dot2 = new THREE.Mesh(dotGeo, dotMat); dot1.position.copy(a); dot2.position.copy(a); dot1.renderOrder = dot2.renderOrder = 20;
   const label = labelSprite(); const grp = new THREE.Group(); grp.add(line, dot1, dot2, label); measures.add(grp);
+  while (measures.children.length > 4) measures.remove(measures.children[0]);   // höchstens 4 Maße – das älteste fällt weg
   mLive = { a, line, dot2, label, grp }; mUpdate(a);
 }
 function measureLive(o, d) { const h = surfHit(o, d); cursor.visible = !!h; if (h) { cursor.position.copy(h.point); if (mLive) mUpdate(h.point); } }
 function clearMeasures() { measures.clear(); mLive = null; toast("Maße gelöscht"); vrLabel2("Maße gelöscht"); }
-function arcTarget(c) {
-  const o = new THREE.Vector3(); c.getWorldPosition(o); const d = new THREE.Vector3(0, 0, -1).applyQuaternion(c.getWorldQuaternion(new THREE.Quaternion()));
-  const v = d.multiplyScalar(7.5); const pts = []; let p = o.clone(), hitP = null;
-  for (let i = 0; i < arcPts; i++) {
-    const n = p.clone().add(v.clone().multiplyScalar(0.05)); v.y -= 9.8 * 0.05;
-    ray.set(p, n.clone().sub(p).normalize()); ray.far = n.distanceTo(p);
-    const h = ray.intersectObjects(vis(walkSet).concat(vis(blockSet), vis(interSet)), false)[0];
-    pts.push(p.clone());
-    if (h) { const nn = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : UP;
-      if (h.object.userData.walk && nn.y > 0.7 && headroomOK(h.point)) hitP = h.point.clone(); p = h.point.clone(); pts.push(p.clone()); break; }
-    p = n;
+function arcTarget(c) {                                   // „Angelrute“: Strahl nach vorn, vom Ende senkrecht nach unten auf den Boden
+  const [o, d] = ctrlRay(c); const MAX = 9;
+  ray.set(o, d); ray.far = MAX;
+  const h = ray.intersectObjects(vis(walkSet).concat(vis(blockSet), vis(frameSet), vis(interSet)), false)[0];
+  let tip, hitP = null;
+  if (h) {
+    const nn = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : UP;
+    if (h.object.userData.walk && nn.y > 0.7) { tip = h.point.clone(); hitP = h.point.clone(); }
+    else tip = h.point.clone().addScaledVector(d, -0.15);  // kurz vor Wand/Decke
+  } else tip = o.clone().addScaledVector(d, MAX);
+  if (!hitP) {
+    ray.set(tip.clone().add(new THREE.Vector3(0, 0.02, 0)), DOWN); ray.far = 30;
+    for (const g of ray.intersectObjects(vis(walkSet).concat(vis(blockSet), vis(frameSet), vis(interSet)), false)) {
+      const nn = g.face ? g.face.normal.clone().transformDirection(g.object.matrixWorld) : UP;
+      if (g.object.userData.walk && nn.y > 0.7) { hitP = g.point.clone(); break; }
+      if (!g.object.userData.walk && Math.abs(nn.y) > 0.7) break;   // auf Dach/Möbel → kein Ziel
+    }
   }
+  const end = hitP || tip.clone().add(new THREE.Vector3(0, -1.5, 0));
+  const pts = [o, tip, new THREE.Vector3(tip.x, end.y, tip.z)];
   while (pts.length < arcPts) pts.push(pts[pts.length - 1].clone());
   arcGeo.setFromPoints(pts); arcGeo.attributes.position.needsUpdate = true;
   arc.material.color.set(hitP ? 0x6fbfa6 : 0xc8553d); return hitP;
@@ -522,6 +530,6 @@ renderer.setAnimationLoop(() => {
   animateLeaves(dt);
   renderer.render(scene, camera);
 });
-window.__h = { rig, camera, leaves, scene, setVar: (v) => { VARIANT = v; applyVariant(); }, interactFrom, setGhost, look: (y, p) => { yaw = y; pitch = p; }, pose: (L, t) => { L.t = L.target = t; applyLeaf(L); } };
+window.__h = { rig, camera, leaves, scene, setVar: (v) => { VARIANT = v; applyVariant(); }, interactFrom, setGhost, look: (y, p) => { yaw = y; pitch = p; }, pose: (L, t) => { L.t = L.target = t; applyLeaf(L); }, arcTarget, measureClick, measures };
 load().catch((e) => { console.error(e); status("Laden fehlgeschlagen: " + (e.message || e)); });
 </script>
