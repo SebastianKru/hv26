@@ -48,8 +48,8 @@ button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);bor
       <input id="pickIn" type="file" accept=".glb,.json" multiple hidden></label></div>
 </div>
 <div class="help" id="help">
-  <b>PC:</b> ins Bild klicken · <kbd>W A S D</kbd> gehen · Maus schauen · <kbd>Shift</kbd> schneller · <kbd>E</kbd> / Linksklick Tür oder Fenster öffnen · <kbd>T</kbd> / Rechtsklick teleportieren · <kbd>1</kbd>–<kbd>4</kbd> Variante · frei durch Wände · <kbd>Esc</kbd> Maus frei.
-  <b>Quest:</b> linker Stick gehen · rechter Stick nach vorn = Teleport-Bogen, zur Seite = drehen · Trigger = Tür/Fenster · <kbd>A</kbd>/<kbd>X</kbd> nächste Variante.
+  <b>PC:</b> ins Bild klicken · <kbd>W A S D</kbd> gehen · Maus schauen · <kbd>Shift</kbd> schneller · <kbd>E</kbd> / Linksklick Tür oder Fenster öffnen · <kbd>T</kbd> / Rechtsklick teleportieren · <kbd>M</kbd> messen (1. Punkt, 2. Punkt) · <kbd>⌫</kbd> Maße löschen · <kbd>1</kbd>–<kbd>4</kbd> Variante · frei durch Wände · <kbd>Esc</kbd> Maus frei.
+  <b>Quest:</b> linker Stick gehen · rechter Trigger halten = zielen, loslassen = teleportieren (oder rechter Stick nach vorn) · rechter Stick zur Seite = drehen · linker Trigger = messen (1× Start, 2× festhalten, 3× neue Messung) · Greiftaste = Tür/Fenster · <kbd>A</kbd>/<kbd>X</kbd> nächste Variante · <kbd>B</kbd>/<kbd>Y</kbd> Maße löschen.
 </div>
 <div id="toast"></div>
 <script type="importmap">{"imports":{
@@ -279,7 +279,7 @@ function blocked(from, dir, dist) {
   }
   return null;
 }
-function headroomOK(p) { ray.set(new THREE.Vector3(p.x, p.y + 0.08, p.z), UP); ray.far = 1.9; return !ray.intersectObjects(vis(blockSet).concat(vis(walkSet)), false).length; }
+function headroomOK(p) { ray.set(new THREE.Vector3(p.x, p.y + 0.08, p.z), UP); ray.far = 1.5; return !ray.intersectObjects(vis(blockSet).concat(vis(walkSet)), false).length; }
 function teleportTarget(origin, dir) {                    // gerader Strahl (PC) – nur begehbare Böden, Platz nach oben
   ray.set(origin, dir); ray.far = 60;
   const hits = ray.intersectObjects(vis(walkSet).concat(vis(blockSet), vis(interSet)), false);
@@ -349,6 +349,8 @@ addEventListener("keydown", (e) => {
   keys[e.code] = true;
   if (e.code === "KeyE") { const o = new THREE.Vector3(), d = new THREE.Vector3(); camera.getWorldPosition(o); camera.getWorldDirection(d); interactFrom(o, d); }
   if (e.code === "KeyT") deskTeleport();
+  if (e.code === "KeyM") { const o = new THREE.Vector3(), d = new THREE.Vector3(); camera.getWorldPosition(o); camera.getWorldDirection(d); measureClick(o, d); }
+  if (e.code === "Backspace" || e.code === "Delete") clearMeasures();
   if (/^Digit[1-4]$/.test(e.code)) { VARIANT = VARS[+e.code.slice(5) - 1][0]; applyVariant(); toast("EG-Variante " + VARS.find((x) => x[0] === VARIANT)[1]); }
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
@@ -392,14 +394,63 @@ const ctrls = [0, 1].map((i) => {
   line.scale.z = 2.5; c.add(line);
   c.add(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.1), new THREE.MeshStandardMaterial({ color: 0x334044 })));
   c.addEventListener("connected", (e) => { c.userData.src = e.data; });
-  c.addEventListener("selectstart", () => { const o = new THREE.Vector3(), d = new THREE.Vector3(0, 0, -1); c.getWorldPosition(o); d.applyQuaternion(c.getWorldQuaternion(new THREE.Quaternion())); if (!interactFrom(o, d)) {} });
+  c.addEventListener("disconnected", () => { c.userData.src = null; });
+  const hand = () => (c.userData.src && c.userData.src.handedness) || (i === 0 ? "left" : "right");
+  // Trigger rechts: zielen + loslassen = teleportieren · Trigger links: messen · Greiftaste: Tür/Fenster
+  c.addEventListener("selectstart", () => { if (hand() === "right") { tpCtrl = c; tpActive = true; } else measureClick(...ctrlRay(c)); });
+  c.addEventListener("selectend", () => { if (hand() === "right" && tpCtrl === c) finishTeleport(); });
+  c.addEventListener("squeezestart", () => { interactFrom(...ctrlRay(c)); });
   return c;
 });
 // Teleport-Bogen
 const arcPts = 40; const arcGeo = new THREE.BufferGeometry().setFromPoints(Array.from({ length: arcPts }, () => new THREE.Vector3()));
 const arc = new THREE.Line(arcGeo, new THREE.LineBasicMaterial({ color: 0x6fbfa6 })); arc.visible = false; scene.add(arc);
 const ring = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.3, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x6fbfa6, side: THREE.DoubleSide })); ring.visible = false; scene.add(ring);
-let tpActive = false, tpTarget = null, snapReady = true, btnPrev = {};
+let tpActive = false, tpTarget = null, tpCtrl = null, snapReady = true, btnPrev = {};
+function ctrlRay(c) { const o = new THREE.Vector3(), d = new THREE.Vector3(0, 0, -1); c.getWorldPosition(o); d.applyQuaternion(c.getWorldQuaternion(new THREE.Quaternion())); return [o, d]; }
+function finishTeleport() {
+  tpActive = false; tpCtrl = null; arc.visible = false; ring.visible = false;
+  if (tpTarget) { const head = new THREE.Vector3(); camera.getWorldPosition(head); rig.position.x += tpTarget.x - head.x; rig.position.z += tpTarget.z - head.z; rig.position.y = tpTarget.y; }
+  tpTarget = null;
+}
+function updateTeleportArc() {
+  if (!tpActive || !tpCtrl) return;
+  arc.visible = true; tpTarget = arcTarget(tpCtrl); ring.visible = !!tpTarget; if (tpTarget) ring.position.copy(tpTarget).add(new THREE.Vector3(0, 0.02, 0));
+}
+// ---------- Messen: 1. Druck = Startpunkt, Linie folgt live · 2. Druck = festhalten · nächster Druck = neue Messung
+const measures = new THREE.Group(); scene.add(measures);
+const mMat = new THREE.LineBasicMaterial({ color: 0xffb020, depthTest: false, transparent: true });
+const dotGeo = new THREE.SphereGeometry(0.018, 12, 8), dotMat = new THREE.MeshBasicMaterial({ color: 0xffb020, depthTest: false, transparent: true });
+const cursor = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true })); cursor.renderOrder = 20; cursor.visible = false; scene.add(cursor);
+let mLive = null;                                          // {a, line, dot2, label}
+function surfHit(o, d) { ray.set(o, d); ray.far = 40; return ray.intersectObjects(vis(walkSet).concat(vis(blockSet), vis(frameSet), vis(interSet)), false)[0] || null; }
+function labelSprite() {
+  const cnv = document.createElement("canvas"); cnv.width = 256; cnv.height = 80; const tex = new THREE.CanvasTexture(cnv); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })); sp.renderOrder = 21; sp.scale.set(0.32, 0.1, 1); sp.userData.cnv = cnv; return sp;
+}
+function setLabel(sp, txt) {
+  const g = sp.userData.cnv.getContext("2d"); g.clearRect(0, 0, 256, 80); g.fillStyle = "rgba(20,26,27,.85)"; g.beginPath(); g.roundRect(4, 6, 248, 68, 14); g.fill();
+  g.fillStyle = "#ffcf66"; g.font = "700 40px system-ui, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, 128, 42); sp.material.map.needsUpdate = true;
+}
+const fmtM = (m) => m.toFixed(2).replace(".", ",") + " m";
+function mUpdate(b) {
+  const L = mLive; if (!L || !b) return; const a = L.a;
+  L.line.geometry.setFromPoints([a, b]); L.dot2.position.copy(b);
+  L.label.position.copy(a).add(b).multiplyScalar(0.5).add(new THREE.Vector3(0, 0.07, 0));
+  const dist = a.distanceTo(b), dh = Math.abs(b.y - a.y);
+  setLabel(L.label, fmtM(dist)); L.dist = dist; L.dh = dh;
+}
+function measureClick(o, d) {
+  const h = surfHit(o, d); if (!h) { toast("Keine Fläche getroffen"); return; }
+  if (mLive) { mUpdate(h.point); vrLabel2("Maß " + fmtM(mLive.dist)); toast("Maß " + fmtM(mLive.dist)); mLive = null; return; }   // festhalten
+  const a = h.point.clone();
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, a]), mMat); line.renderOrder = 20;
+  const dot1 = new THREE.Mesh(dotGeo, dotMat), dot2 = new THREE.Mesh(dotGeo, dotMat); dot1.position.copy(a); dot2.position.copy(a); dot1.renderOrder = dot2.renderOrder = 20;
+  const label = labelSprite(); const grp = new THREE.Group(); grp.add(line, dot1, dot2, label); measures.add(grp);
+  mLive = { a, line, dot2, label, grp }; mUpdate(a);
+}
+function measureLive(o, d) { const h = surfHit(o, d); cursor.visible = !!h; if (h) { cursor.position.copy(h.point); if (mLive) mUpdate(h.point); } }
+function clearMeasures() { measures.clear(); mLive = null; toast("Maße gelöscht"); vrLabel2("Maße gelöscht"); }
 function arcTarget(c) {
   const o = new THREE.Vector3(); c.getWorldPosition(o); const d = new THREE.Vector3(0, 0, -1).applyQuaternion(c.getWorldQuaternion(new THREE.Quaternion()));
   const v = d.multiplyScalar(7.5); const pts = []; let p = o.clone(), hitP = null;
@@ -427,11 +478,8 @@ function xrInput(dt) {
         move.copy(fwd).multiplyScalar(-sy).addScaledVector(right, sx).multiplyScalar(1.5 * dt); tryMove(move);
       }
     } else {                                             // teleportieren / drehen
-      if (sy < -0.6) { tpActive = true; arc.visible = true; tpTarget = arcTarget(c); ring.visible = !!tpTarget; if (tpTarget) ring.position.copy(tpTarget).add(new THREE.Vector3(0, 0.02, 0)); }
-      else if (tpActive) {
-        tpActive = false; arc.visible = false; ring.visible = false;
-        if (tpTarget) { const head = new THREE.Vector3(); camera.getWorldPosition(head); rig.position.x += tpTarget.x - head.x; rig.position.z += tpTarget.z - head.z; rig.position.y = tpTarget.y; }
-      }
+      if (sy < -0.6) { tpActive = true; tpCtrl = c; c.userData.stickTp = true; }
+      else if (c.userData.stickTp) { c.userData.stickTp = false; finishTeleport(); }
       if (Math.abs(sx) > 0.7 && snapReady && !tpActive) {
         snapReady = false; const head = new THREE.Vector3(); camera.getWorldPosition(head); const a = -Math.sign(sx) * Math.PI / 6;
         rig.position.sub(head).applyAxisAngle(UP, a).add(head); rig.rotation.y += a;
@@ -439,6 +487,8 @@ function xrInput(dt) {
     }
     const b = gp.buttons; const key = src.handedness;
     const pressed = !!(b[4] && b[4].pressed); if (pressed && !btnPrev[key]) nextVariant(1); btnPrev[key] = pressed;
+    const p5 = !!(b[5] && b[5].pressed); if (p5 && !btnPrev[key + "5"]) clearMeasures(); btnPrev[key + "5"] = p5;
+    if (src.handedness === "left") measureLive(...ctrlRay(c));
   }
 }
 // Varianten-Anzeige in VR
@@ -458,9 +508,10 @@ function vrLabel2(t) {
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(0.05, clock.getDelta());
-  if (renderer.xr.isPresenting) { xrInput(dt); settle(); if (performance.now() > lblUntil) lbl.visible = false; }
+  if (renderer.xr.isPresenting) { xrInput(dt); updateTeleportArc(); settle(); if (performance.now() > lblUntil) lbl.visible = false; }
   else {
     rig.rotation.y = yaw; camera.rotation.x = pitch;
+    if (mLive) { const o = new THREE.Vector3(), d = new THREE.Vector3(); camera.getWorldPosition(o); camera.getWorldDirection(d); measureLive(o, d); } else cursor.visible = false;
     const f = (keys.KeyW || keys.ArrowUp || keys.Touch ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0), r = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
     if (f || r) {
       const sp = (keys.ShiftLeft || keys.ShiftRight ? 3.2 : 1.5) * dt;
