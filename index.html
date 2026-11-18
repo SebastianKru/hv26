@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Haus Obersteinbach Begehung</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
@@ -14,8 +15,19 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);overflow:hidd
 canvas{display:block;width:100%;height:100%;touch-action:none}
 .bar{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));max-width:min(560px,calc(100% - 32px));
   background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;backdrop-filter:blur(6px)}
+.head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#cfg{display:flex;flex-direction:column;gap:8px}
+#cfg[hidden]{display:none}
+#fold{padding:3px 8px;font-size:12px;white-space:nowrap}
 .bar h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.01em}
 .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.row[hidden]{display:none}
+.sub{margin:-2px 0 0 10px;padding:2px 0 2px 10px;border-left:2px solid var(--accent);display:flex;flex-direction:column;gap:6px}
+.sub[hidden]{display:none}
+#kvrows{display:flex;flex-direction:column;gap:6px}
+#kvrows[hidden]{display:none}
+.note{font-size:13px;color:var(--muted)}
+.build{font-size:11px;color:var(--muted);font-family:var(--f-mono)}
 .lab{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-right:2px}
 button{font:inherit;font-size:13px;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:7px;padding:5px 9px;cursor:pointer}
 button:hover{border-color:var(--accent)}
@@ -36,8 +48,18 @@ button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);bor
 <div id="app"></div>
 <div id="cross" hidden></div>
 <div class="bar" id="bar">
-  <h1>Haus Obersteinbach – Begehung</h1>
-  <div class="row" id="vars"><span class="lab">EG Süd</span></div>
+  <div class="head"><h1>Haus Obersteinbach – Begehung <span class="build" id="build"></span></h1>
+    <button type="button" id="fold" aria-expanded="true" aria-controls="cfg" title="Menü ein-/ausklappen">▾ Menü</button></div>
+  <div id="cfg">
+  <div class="row" id="grs"><span class="lab">Grundriss</span></div>
+  <div class="sub" id="subG3"><div class="row" id="vars"><span class="lab">EG-Variante (Süd)</span></div>
+    <div id="kvrows">
+      <div class="row"><span class="lab">OG Bad / Küche</span><button type="button" data-k="bad" data-v="0">bisher</button><button type="button" data-k="bad" data-v="15">Küche 15 cm nach Norden</button></div>
+      <div class="row"><span class="lab">Spülmaschine</span><button type="button" data-k="sp" data-v="u">unten + Hängeschränke</button><button type="button" data-k="sp" data-v="v">im Vorratsschrank</button><button type="button" data-k="sp" data-v="h">3 Hochschränke</button></div>
+    </div></div>
+  <div class="sub" id="subG1" hidden><div class="row"><span class="lab">EG</span><span class="note">Plan 27.04.2026 – keine Untervarianten</span></div></div>
+  <div class="row" id="vars1"><span class="lab">Stellplatz</span></div>
+  <div class="row" id="kue" hidden><span class="lab">Küche</span></div>
   <div class="row">
     <button id="openAll" type="button">Alle Türen &amp; Fenster öffnen</button>
     <button id="closeAll" type="button">Alle schließen</button>
@@ -46,10 +68,11 @@ button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);bor
   <div class="row"><span id="status">Modell wird geladen …</span>
     <label id="pick" hidden style="font-size:13px;border:1px solid var(--accent);border-radius:7px;padding:5px 9px;cursor:pointer">haus.glb (+ palette.json) wählen
       <input id="pickIn" type="file" accept=".glb,.json" multiple hidden></label></div>
+  </div>
 </div>
 <div class="help" id="help">
-  <b>PC:</b> ins Bild klicken · <kbd>W A S D</kbd> gehen · Maus schauen · <kbd>Shift</kbd> schneller · <kbd>E</kbd> / Linksklick Tür oder Fenster öffnen · <kbd>T</kbd> / Rechtsklick teleportieren · <kbd>M</kbd> messen (1. Punkt, 2. Punkt) · <kbd>⌫</kbd> Maße löschen · <kbd>1</kbd>–<kbd>4</kbd> Variante · frei durch Wände · <kbd>Esc</kbd> Maus frei.
-  <b>Quest:</b> linker Stick gehen · rechter Stick nach vorn = Teleport-Strahl (Angelrute: zielen, vom Strahlende fällt die Linie auf den Boden), loslassen = springen · rechter Stick zur Seite = drehen · rechter Trigger oder Greiftaste = Tür/Fenster · linker Trigger = messen (1× Start, 2× festhalten, 3× neue Messung, max. 4 Maße) · <kbd>A</kbd>/<kbd>X</kbd> nächste Variante · <kbd>B</kbd>/<kbd>Y</kbd> Maße löschen.
+  <b>PC:</b> ins Bild klicken · <kbd>W A S D</kbd> gehen · Maus schauen · <kbd>Shift</kbd> schneller · <kbd>E</kbd> / Linksklick Tür, Fenster, Schublade oder Gerät öffnen · <kbd>T</kbd> / Rechtsklick teleportieren · <kbd>M</kbd> messen (1. Punkt, 2. Punkt) · <kbd>⌫</kbd> Maße löschen · <kbd>1</kbd>–<kbd>4</kbd> EG-Variante (nur Grundriss 3) · <kbd>V</kbd> nächste Variante (Grundriss 3: EG · Grundriss 1: Carport ↔ Garage) · <kbd>G</kbd> Grundriss 3 ↔ 1 · frei durch Wände · <kbd>Esc</kbd> Maus frei.
+  <b>Quest:</b> linker Stick gehen · rechter Stick nach vorn = Teleport-Strahl (Angelrute: zielen, vom Strahlende fällt die Linie auf den Boden), loslassen = springen · rechter Stick zur Seite = drehen · rechter Trigger oder rechte Greiftaste = Tür/Fenster/Schublade/Gerät · linker Trigger = messen (1× Start, 2× festhalten, 3× neue Messung, max. 4 Maße) · linke Greiftaste = Maße löschen · <kbd>A</kbd>/<kbd>X</kbd> nächste Variante (Grundriss 3: EG · Grundriss 1: Carport ↔ Garage) · <kbd>B</kbd>/<kbd>Y</kbd> Grundriss 3 ↔ 1.
 </div>
 <div id="toast"></div>
 <script type="importmap">{"imports":{
@@ -133,7 +156,8 @@ function makeMat(name) {
   const n = (name || "").toLowerCase(); const p = PAL[name] || [0.8, 0.8, 0.8, 1];
   const col = new THREE.Color().setRGB(p[0], p[1], p[2], THREE.LinearSRGBColorSpace);
   let m;
-  if (/verglas|glas|glass/.test(n)) m = new THREE.MeshStandardMaterial({ color: 0xcfe6ef, transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.1, depthWrite: false });
+  if (/buntglas/.test(n)) m = new THREE.MeshStandardMaterial({ color: col, emissive: col.clone().multiplyScalar(0.25), transparent: true, opacity: 0.6, roughness: 0.15, metalness: 0.0, depthWrite: false });   // farbiges Bleiglas
+  else if (/verglas|glas|glass/.test(n)) m = new THREE.MeshStandardMaterial({ color: 0xcfe6ef, transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.1, depthWrite: false });
   else {
     m = new THREE.MeshStandardMaterial({ color: col, roughness: 0.85, metalness: /edelstahl|metall|alu/.test(n) ? 0.5 : 0.0 });
     if (/fichte|holz|douglas|lärche|larche|buche|eiche|diele|schlossdiel|treppe|parkett|wood|plank|massivholz/.test(n)) { m.color.lerp(new THREE.Color(1, 1, 1), 0.25); triplanar(m, TEX.wood, 1 / 0.58); }
@@ -147,7 +171,18 @@ function makeMat(name) {
 }
 
 // ---------- Laden
-let VARIANT = "3.3"; try { VARIANT = localStorage.getItem("haus.var") || "3.3"; } catch (e) {}
+const BUILD = "2026-11-18c";                 // Modellstand – bei jedem Export erhöhen (umgeht den Browser-Cache)
+let VARIANT = "3.0"; try { VARIANT = localStorage.getItem("haus.var2") || "3.0"; } catch (e) {}
+let KV = { bad: "0", sp: "u" }; try { KV = { ...KV, ...JSON.parse(localStorage.getItem("haus.kv") || "{}") }; } catch (e) {}
+function kvOk(kv) { if (!kv) return true; for (const part of String(kv).split("|")) { const i = part.indexOf("="); if (i < 0) continue; const k = part.slice(0, i); if (KV[k] !== undefined && !part.slice(i + 1).split("/").includes(KV[k])) return false; } return true; }
+let GR = "3"; try { GR = localStorage.getItem("haus.gr") || "3"; } catch (e) {}
+let STELL = "carport"; try { STELL = localStorage.getItem("haus.stell") || "carport"; } catch (e) {}
+const STELLS = [["carport", "Carport (bisher)"], ["garage", "Garage mit Rolltor"]];
+let KUE = "G"; try { KUE = localStorage.getItem("haus.kue") || "G"; } catch (e) {}
+const KUES = [["G", "G-Form (mit Halbinsel)"], ["U", "U-Form (ohne Halbinsel)"]];
+document.getElementById("build").textContent = "Stand " + BUILD;
+document.getElementById("fold").onclick = () => { const c = document.getElementById("cfg"), b = document.getElementById("fold"); c.hidden = !c.hidden; b.setAttribute("aria-expanded", String(!c.hidden)); b.textContent = c.hidden ? "▸ Menü" : "▾ Menü"; };
+const GRS = [["3", "Grundriss 3 (bisher)"], ["1", "Grundriss 1 (27.04.)"]];
 const VARS = [["3.0", "3.0 Original K.-P."], ["3.1", "3.1 aktuell"], ["3.2", "3.2 Bad Süd"], ["3.3", "3.3 Kombi"]];
 const groups = [];          // {mesh, var, walk}
 const leaves = [];          // {obj, ex, t, target, q0, p0, axisAng, slide}
@@ -155,7 +190,9 @@ const walkSet = [], blockSet = [], interSet = [], frameSet = [];
 let GHOST = false; try { GHOST = localStorage.getItem("haus.ghost") === "1"; } catch (e) {}
 const frameToLeaves = new Map();
 const baseName = (n) => n.replace(/__leaf\d+$/, "").replace(/\.\d{3}$/, "");
-function visFor(v) { return v === "" || v === undefined || (v === "!3.3" ? VARIANT !== "3.3" : v === VARIANT); }
+const isOpt = (v) => typeof v === "string" && (v.startsWith("car:") || v.startsWith("kue:"));
+function visVar(v) { if (typeof v === "string" && v.startsWith("car:")) return v === "car:" + STELL; if (typeof v === "string" && v.startsWith("kue:")) return v === "kue:" + KUE; return v === "" || v === undefined || (v === "!3.3" ? VARIANT !== "3.3" : v === VARIANT); }
+function visFor(v, g, kv) { if (g && g !== GR) return false; if (!kvOk(kv)) return false; return (g === "1" && !isOpt(v)) ? true : visVar(v); }
 
 function pickFiles() {
   return new Promise((res) => {
@@ -171,17 +208,17 @@ function pickFiles() {
   });
 }
 async function load() {
-  try { PAL = await (await fetch("palette.json")).json(); } catch (e) { PAL = {}; }
+  try { PAL = await (await fetch("palette.json?v=" + BUILD)).json(); } catch (e) { PAL = {}; }
   let gltf;
   try {
-    gltf = await new Promise((res, rej) => new GLTFLoader().load("haus.glb", res, (ev) => {
+    gltf = await new Promise((res, rej) => new GLTFLoader().load("haus.glb?v=" + BUILD, res, (ev) => {
       if (ev.total) status(`Modell wird geladen … ${Math.round(ev.loaded / ev.total * 100)} %`);
     }, rej));
   } catch (e) {
     let buf = null;
     try {                                   // gepackte Fassung (gzip + base64) – so liegt das Modell im Claude-Artefakt
       status("Modell wird geladen …");
-      const r = await fetch("haus-modell.txt"); if (!r.ok) throw new Error(r.status);
+      const r = await fetch("haus-modell.txt?v=" + BUILD); if (!r.ok) throw new Error(r.status);
       const b64 = (await r.text()).trim(); const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
       buf = await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
     } catch (e2) { console.warn("gepacktes Modell nicht verfügbar", e2); }
@@ -199,7 +236,7 @@ async function load() {
     while (node && (ex.var === undefined && ex.walk === undefined) && node.parent) { node = node.parent; ex = { ...node.userData, ...ex }; }
     const own = o.parent && o.parent.userData && Object.keys(o.parent.userData).length ? { ...o.parent.userData, ...o.userData } : ex;
     if (own.leaf) { const ln = o.userData.leaf ? o : o.parent; leafNodes.push([o, own, ln]); return; }
-    const v = own.var || ""; const walk = own.walk ? 1 : (own.frame ? 2 : 0);
+    const kvv = own.kv || ""; const v = own.var || ""; const walk = own.walk ? 1 : (own.frame ? 2 : 0); const grd = own.gr || "";
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     const g0 = o.geometry; const geom = g0.index ? g0 : g0.setIndex([...Array(g0.attributes.position.count).keys()]);
     const groupsOf = g0.groups && g0.groups.length ? g0.groups : [{ start: 0, count: geom.index.count, materialIndex: 0 }];
@@ -210,7 +247,7 @@ async function load() {
       sub.setIndex(Array.from(geom.index.array.slice(gr.start, gr.start + gr.count)));
       const g2 = sub.toNonIndexed(); g2.applyMatrix4(o.matrixWorld);
       if (!geom.attributes.normal) g2.computeVertexNormals();
-      const key = v + "|" + walk + "|" + mname; if (!buckets.has(key)) buckets.set(key, { v, walk, mname, list: [] }); buckets.get(key).list.push(g2);
+      const key = v + "|" + walk + "|" + grd + "|" + kvv + "|" + mname; if (!buckets.has(key)) buckets.set(key, { v, walk, grd, kv: kvv, mname, list: [] }); buckets.get(key).list.push(g2);
     }
   });
   for (const b of buckets.values()) {
@@ -218,7 +255,7 @@ async function load() {
     if (!g) continue;
     if (g.computeBoundsTree) g.computeBoundsTree();
     const mesh = new THREE.Mesh(g, makeMat(b.mname)); mesh.matrixAutoUpdate = false;
-    mesh.userData = { var: b.v, walk: b.walk, glass: !!mesh.material.transparent };
+    mesh.userData = { var: b.v, walk: b.walk, gr: b.grd, kv: b.kv, glass: !!mesh.material.transparent };
     scene.add(mesh); groups.push(mesh);
     (b.walk === 1 ? walkSet : b.walk === 2 ? frameSet : blockSet).push(mesh);
   }
@@ -229,8 +266,8 @@ async function load() {
       const wp = new THREE.Vector3(), wq = new THREE.Quaternion(), ws = new THREE.Vector3(); ln.matrixWorld.decompose(wp, wq, ws);
       const g = new THREE.Group(); g.position.copy(wp); g.quaternion.copy(wq); g.scale.copy(ws); scene.add(g);
       const bn = baseName(ln.name);
-      L = { obj: g, var: ex.var || "", t: 0, target: 0, q0: wq.clone(), p0: wp.clone(), open: ex.open || "swing", ang: (ex.ang || 85) * Math.PI / 180,
-        slide: ex.slide ? new THREE.Vector3(ex.slide[0], ex.slide[2], -ex.slide[1]) : null, name: bn, inv: ln.matrixWorld.clone().invert() };
+      L = { obj: g, var: ex.var || "", gr: ex.gr || "", kv: ex.kv || "", t: 0, target: 0, q0: wq.clone(), p0: wp.clone(), open: ex.open || "swing", ang: (ex.ang || 85) * Math.PI / 180,
+        slide: ex.slide ? new THREE.Vector3(ex.slide[0], ex.slide[2], -ex.slide[1]) : null, axis: ex.axis ? new THREE.Vector3(ex.axis[0], ex.axis[2], -ex.axis[1]).normalize() : null, name: bn, inv: ln.matrixWorld.clone().invert() };
       leafByNode.set(ln, L); leaves.push(L);
       if (!frameToLeaves.has(bn)) frameToLeaves.set(bn, []); frameToLeaves.get(bn).push(L);
     }
@@ -247,17 +284,45 @@ async function load() {
 
 // ---------- Varianten
 function applyVariant() {
-  for (const m of groups) m.visible = visFor(m.userData.var);
-  for (const L of leaves) L.obj.visible = visFor(L.var);
+  for (const m of groups) m.visible = visFor(m.userData.var, m.userData.gr, m.userData.kv);
+  for (const L of leaves) L.obj.visible = visFor(L.var, L.gr, L.kv);
+  for (const b of document.querySelectorAll("#kvrows button[data-k]")) b.setAttribute("aria-pressed", KV[b.dataset.k] === b.dataset.v ? "true" : "false");
+  const hlEl = document.getElementById("hlval"); if (hlEl) hlEl.textContent = (KV.hl / 100).toFixed(2).replace(".", ",") + " m";
+  for (const b of document.querySelectorAll("#grs button")) b.setAttribute("aria-pressed", b.dataset.g === GR ? "true" : "false");
+  $("subG3").hidden = GR !== "3"; $("subG1").hidden = GR !== "1";
+  try { localStorage.setItem("haus.gr", GR); } catch (e) {}
   for (const b of document.querySelectorAll("#vars button")) b.setAttribute("aria-pressed", b.dataset.v === VARIANT ? "true" : "false");
-  try { localStorage.setItem("haus.var", VARIANT); } catch (e) {}
-  vrLabel(VARS.find((x) => x[0] === VARIANT)[1]);
+  try { localStorage.setItem("haus.var2", VARIANT); localStorage.setItem("haus.kv", JSON.stringify(KV)); } catch (e) {}
+  for (const b of document.querySelectorAll("#vars1 button")) b.setAttribute("aria-pressed", b.dataset.s === STELL ? "true" : "false");
+  try { localStorage.setItem("haus.stell", STELL); } catch (e) {}
+  for (const b of document.querySelectorAll("#kue button")) b.setAttribute("aria-pressed", b.dataset.k === KUE ? "true" : "false");
+  try { localStorage.setItem("haus.kue", KUE); } catch (e) {}
+  vrLabel2(GR === "1" ? "Grundriss 1 · " + STELLS.find((x) => x[0] === STELL)[1] : "Grundriss 3 · EG " + VARS.find((x) => x[0] === VARIANT)[1]);
 }
+for (const [g, lab] of GRS) {
+  const b = document.createElement("button"); b.type = "button"; b.textContent = lab; b.dataset.g = g; b.setAttribute("aria-pressed", "false");
+  b.onclick = () => { setGR(g); }; $("grs").appendChild(b);
+}
+function setGR(g) { GR = g; applyVariant(); toast(GRS.find((x) => x[0] === GR)[1]); }
+function nextGR() { setGR(GR === "3" ? "1" : "3"); }
+$("subG3").hidden = GR !== "3"; $("subG1").hidden = GR !== "1";
 for (const [v, lab] of VARS) {
   const b = document.createElement("button"); b.type = "button"; b.textContent = lab; b.dataset.v = v; b.setAttribute("aria-pressed", "false");
-  b.onclick = () => { VARIANT = v; applyVariant(); toast("EG-Variante " + lab); }; $("vars").appendChild(b);
+  b.onclick = () => { if (GR !== "3") return; VARIANT = v; applyVariant(); toast("EG-Variante " + lab); }; $("vars").appendChild(b);
 }
-function nextVariant(d = 1) { const i = VARS.findIndex((x) => x[0] === VARIANT); VARIANT = VARS[(i + d + VARS.length) % VARS.length][0]; applyVariant(); toast("EG-Variante " + VARS.find((x) => x[0] === VARIANT)[1]); }
+for (const [v, lab] of STELLS) {
+  const b = document.createElement("button"); b.type = "button"; b.textContent = lab; b.dataset.s = v; b.setAttribute("aria-pressed", "false");
+  b.onclick = () => { STELL = v; applyVariant(); toast(lab); }; $("vars1").appendChild(b);
+}
+for (const [v, lab] of KUES) {
+  const b = document.createElement("button"); b.type = "button"; b.textContent = lab; b.dataset.k = v; b.setAttribute("aria-pressed", "false");
+  b.onclick = () => { KUE = v; applyVariant(); toast("Küche " + lab); }; $("kue").appendChild(b);
+}
+for (const b of document.querySelectorAll("#kvrows button[data-k]")) b.onclick = () => { KV[b.dataset.k] = b.dataset.v; applyVariant(); toast("OG: " + b.textContent); };
+const stepHl = (d) => { KV.hl = String(Math.min(120, Math.max(60, +KV.hl + d))); applyVariant(); toast("Halbinsel " + (KV.hl / 100).toFixed(2).replace(".", ",") + " m"); };
+
+function nextKueche() { KUE = KUE === "G" ? "U" : "G"; applyVariant(); const t = "Küche " + KUES.find((x) => x[0] === KUE)[1]; toast(t); vrLabel2(t); }
+function nextVariant(d = 1) { if (GR !== "3") { const i = STELLS.findIndex((x) => x[0] === STELL); STELL = STELLS[(i + 1) % STELLS.length][0]; applyVariant(); toast(STELLS.find((x) => x[0] === STELL)[1]); return; } const i = VARS.findIndex((x) => x[0] === VARIANT); VARIANT = VARS[(i + d + VARS.length) % VARS.length][0]; applyVariant(); toast("EG-Variante " + VARS.find((x) => x[0] === VARIANT)[1]); }
 
 // ---------- Raycasts
 const ray = new THREE.Raycaster(); ray.firstHitOnly = false;
@@ -305,9 +370,18 @@ function settle() {                                        // auch bei echtem Ge
   const gy = groundAt(new THREE.Vector3(head.x, rig.position.y, head.z), 0.45, 0.6);
   if (gy !== null) rig.position.y += (gy - rig.position.y) * 0.35;
 }
+let airT = 0;
+function gravity(dt) {                                     // länger kein Boden unter den Füßen → auf den nächsten Boden darunter sinken
+  const head = new THREE.Vector3(); camera.getWorldPosition(head);
+  const p = new THREE.Vector3(head.x, rig.position.y, head.z);
+  if (groundAt(p, 0.5, 0.85) !== null) { airT = 0; return; }
+  airT += dt; if (airT < 0.35) return;                     // kurze Lücken (Wände, Öffnungen) weiter überqueren
+  const g = groundAt(p, 0.5, 15);
+  if (g !== null) rig.position.y = Math.max(g, rig.position.y - 4 * dt);
+}
 function spawn() {
-  rig.position.set(6.3, 0, 2.2);                           // Südgarten, Blick nach Norden aufs Haus
-  const gy = groundAt(new THREE.Vector3(6.3, 20, 2.2), 0, 40); rig.position.y = gy ?? -1.2; rig.rotation.y = 0;
+  rig.position.set(1.45, 1.78, -6.4);                      // OG, vor dem Esstisch, Blick nach Norden auf die Küche
+  const gy = groundAt(new THREE.Vector3(1.45, 1.78, -6.4), 0.5, 1.5); rig.position.y = gy ?? 1.78; rig.rotation.y = 0; yaw = 0; pitch = -0.12;
 }
 
 // ---------- Türen und Fenster
@@ -327,7 +401,7 @@ function animateLeaves(dt) {
 function applyLeaf(L) {
   const e = L.t * L.t * (3 - 2 * L.t);
   if (L.open === "slide" && L.slide) L.obj.position.copy(L.p0).addScaledVector(L.slide, e);
-  else { qTmp.setFromAxisAngle(UP, L.ang * e); L.obj.quaternion.copy(qTmp).multiply(L.q0); }
+  else { qTmp.setFromAxisAngle(L.axis || UP, L.ang * e); L.obj.quaternion.copy(qTmp).multiply(L.q0); }   // Kippflügel: eigene Achse
 }
 function setGhost(v) {}
 $("openAll").onclick = () => { for (const L of leaves) toggleLeaf(L, 1); toast("Alle Türen und Fenster offen"); };
@@ -351,7 +425,10 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyT") deskTeleport();
   if (e.code === "KeyM") { const o = new THREE.Vector3(), d = new THREE.Vector3(); camera.getWorldPosition(o); camera.getWorldDirection(d); measureClick(o, d); }
   if (e.code === "Backspace" || e.code === "Delete") clearMeasures();
-  if (/^Digit[1-4]$/.test(e.code)) { VARIANT = VARS[+e.code.slice(5) - 1][0]; applyVariant(); toast("EG-Variante " + VARS.find((x) => x[0] === VARIANT)[1]); }
+  if (e.code === "KeyG") nextGR();
+  if (e.code === "KeyV") nextVariant(1);
+  if (e.code === "KeyK") nextKueche();
+  if (/^Digit[1-4]$/.test(e.code)) { if (GR !== "3") { toast("EG-Varianten gibt es nur in Grundriss 3"); } else { VARIANT = VARS[+e.code.slice(5) - 1][0]; applyVariant(); toast("EG-Variante " + VARS.find((x) => x[0] === VARIANT)[1]); } }
 });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 const cv = renderer.domElement;
@@ -398,7 +475,7 @@ const ctrls = [0, 1].map((i) => {
   const hand = () => (c.userData.src && c.userData.src.handedness) || (i === 0 ? "left" : "right");
   // Trigger rechts: zielen + loslassen = teleportieren · Trigger links: messen · Greiftaste: Tür/Fenster
   c.addEventListener("selectstart", () => { if (hand() === "right") interactFrom(...ctrlRay(c)); else measureClick(...ctrlRay(c)); });
-  c.addEventListener("squeezestart", () => { interactFrom(...ctrlRay(c)); });
+  c.addEventListener("squeezestart", () => { if (hand() === "left") clearMeasures(); else interactFrom(...ctrlRay(c)); });
   return c;
 });
 // Teleport-Bogen
@@ -495,7 +572,8 @@ function xrInput(dt) {
     }
     const b = gp.buttons; const key = src.handedness;
     const pressed = !!(b[4] && b[4].pressed); if (pressed && !btnPrev[key]) nextVariant(1); btnPrev[key] = pressed;
-    const p5 = !!(b[5] && b[5].pressed); if (p5 && !btnPrev[key + "5"]) clearMeasures(); btnPrev[key + "5"] = p5;
+    const p5 = !!(b[5] && b[5].pressed); if (p5 && !btnPrev[key + "5"]) nextGR(); btnPrev[key + "5"] = p5;
+    const p3 = !!(b[3] && b[3].pressed); if (p3 && !btnPrev[key + "3"]) nextKueche(); btnPrev[key + "3"] = p3;
     if (src.handedness === "left") measureLive(...ctrlRay(c));
   }
 }
@@ -516,7 +594,7 @@ function vrLabel2(t) {
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(0.05, clock.getDelta());
-  if (renderer.xr.isPresenting) { xrInput(dt); updateTeleportArc(); settle(); if (performance.now() > lblUntil) lbl.visible = false; }
+  if (renderer.xr.isPresenting) { xrInput(dt); updateTeleportArc(); settle(); gravity(dt); if (performance.now() > lblUntil) lbl.visible = false; }
   else {
     rig.rotation.y = yaw; camera.rotation.x = pitch;
     if (mLive) { const o = new THREE.Vector3(), d = new THREE.Vector3(); camera.getWorldPosition(o); camera.getWorldDirection(d); measureLive(o, d); } else cursor.visible = false;
@@ -527,9 +605,10 @@ renderer.setAnimationLoop(() => {
       move.copy(fwd).multiplyScalar(f).addScaledVector(right, r).normalize().multiplyScalar(sp); tryMove(move);
     }
   }
+  if (!renderer.xr.isPresenting) gravity(dt);
   animateLeaves(dt);
   renderer.render(scene, camera);
 });
-window.__h = { rig, camera, leaves, scene, setVar: (v) => { VARIANT = v; applyVariant(); }, interactFrom, setGhost, look: (y, p) => { yaw = y; pitch = p; }, pose: (L, t) => { L.t = L.target = t; applyLeaf(L); }, arcTarget, measureClick, measures };
+window.__h = { rig, camera, leaves, scene, setVar: (v) => { VARIANT = v; applyVariant(); }, interactFrom, setGhost, look: (y, p) => { yaw = y; pitch = p; }, pose: (L, t) => { L.t = L.target = t; applyLeaf(L); }, arcTarget, measureClick, measures, tryMove, setGR, groundAt, setStell: (v) => { STELL = v; applyVariant(); }, setKV: (k, v) => { KV[k] = v; applyVariant(); }, gravity };
 load().catch((e) => { console.error(e); status("Laden fehlgeschlagen: " + (e.message || e)); });
 </script>
