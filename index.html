@@ -72,7 +72,7 @@ button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);bor
 </div>
 <div class="help" id="help">
   <b>PC:</b> ins Bild klicken · <kbd>W A S D</kbd> gehen · Maus schauen · <kbd>Shift</kbd> schneller · <kbd>E</kbd> / Linksklick Tür, Fenster, Schublade oder Gerät öffnen · <kbd>T</kbd> / Rechtsklick teleportieren · <kbd>M</kbd> messen (1. Punkt, 2. Punkt) · <kbd>⌫</kbd> Maße löschen · <kbd>1</kbd>–<kbd>4</kbd> EG-Variante (nur Grundriss 3) · <kbd>V</kbd> nächste Variante (Grundriss 3: EG · Grundriss 1: Carport ↔ Garage) · <kbd>G</kbd> Grundriss 3 ↔ 1 · frei durch Wände · <kbd>Esc</kbd> Maus frei.
-  <b>Quest:</b> linker Stick gehen · rechter Stick nach vorn = Teleport-Strahl (Angelrute: zielen, vom Strahlende fällt die Linie auf den Boden), loslassen = springen · rechter Stick zur Seite = drehen · rechter Trigger oder rechte Greiftaste = Tür/Fenster/Schublade/Gerät · linker Trigger = messen (1× Start, 2× festhalten, 3× neue Messung, max. 4 Maße) · linke Greiftaste = Maße löschen · <kbd>A</kbd>/<kbd>X</kbd> nächste Variante (Grundriss 3: EG · Grundriss 1: Carport ↔ Garage) · <kbd>B</kbd>/<kbd>Y</kbd> Grundriss 3 ↔ 1.
+  <b>Quest:</b> linker Stick gehen · rechter Stick nach vorn = Teleport-Strahl (Angelrute: zielen, vom Strahlende fällt die Linie auf den Boden), loslassen = springen · rechter Stick zur Seite = drehen · rechter Trigger oder rechte Greiftaste = Tür/Fenster/Schublade/Gerät · linker Trigger = messen (1× Start, 2× festhalten, 3× neue Messung, max. 4 Maße) · linke Greiftaste = Maße löschen · <kbd>A</kbd>/<kbd>X</kbd> Küche: Hochschrank-Kombi durchschalten (unten + Hängeschränke → im Vorrat → 3 Hochschränke) · <kbd>B</kbd>/<kbd>Y</kbd> Küchentiefe (bisher ↔ 15 cm nach Norden).
 </div>
 <div id="toast"></div>
 <script type="importmap">{"imports":{
@@ -171,7 +171,7 @@ function makeMat(name) {
 }
 
 // ---------- Laden
-const BUILD = "2026-11-18c";                 // Modellstand – bei jedem Export erhöhen (umgeht den Browser-Cache)
+const BUILD = "2026-11-19a";                 // Modellstand – bei jedem Export erhöhen (umgeht den Browser-Cache)
 let VARIANT = "3.0"; try { VARIANT = localStorage.getItem("haus.var2") || "3.0"; } catch (e) {}
 let KV = { bad: "0", sp: "u" }; try { KV = { ...KV, ...JSON.parse(localStorage.getItem("haus.kv") || "{}") }; } catch (e) {}
 function kvOk(kv) { if (!kv) return true; for (const part of String(kv).split("|")) { const i = part.indexOf("="); if (i < 0) continue; const k = part.slice(0, i); if (KV[k] !== undefined && !part.slice(i + 1).split("/").includes(KV[k])) return false; } return true; }
@@ -321,6 +321,9 @@ for (const [v, lab] of KUES) {
 for (const b of document.querySelectorAll("#kvrows button[data-k]")) b.onclick = () => { KV[b.dataset.k] = b.dataset.v; applyVariant(); toast("OG: " + b.textContent); };
 const stepHl = (d) => { KV.hl = String(Math.min(120, Math.max(60, +KV.hl + d))); applyVariant(); toast("Halbinsel " + (KV.hl / 100).toFixed(2).replace(".", ",") + " m"); };
 
+const SPS = [["u", "Spülmaschine unten + Hängeschränke"], ["v", "Spülmaschine im Vorratsschrank"], ["h", "3 Hochschränke"]];
+function nextSp() { const i = SPS.findIndex((x) => x[0] === KV.sp); KV.sp = SPS[(i + 1) % SPS.length][0]; applyVariant(); const t = SPS.find((x) => x[0] === KV.sp)[1]; toast(t); vrLabel2(t); }
+function nextBad() { KV.bad = KV.bad === "15" ? "0" : "15"; applyVariant(); const t = KV.bad === "15" ? "Küche 15 cm nach Norden" : "Küche Tiefe bisher"; toast(t); vrLabel2(t); }
 function nextKueche() { KUE = KUE === "G" ? "U" : "G"; applyVariant(); const t = "Küche " + KUES.find((x) => x[0] === KUE)[1]; toast(t); vrLabel2(t); }
 function nextVariant(d = 1) { if (GR !== "3") { const i = STELLS.findIndex((x) => x[0] === STELL); STELL = STELLS[(i + 1) % STELLS.length][0]; applyVariant(); toast(STELLS.find((x) => x[0] === STELL)[1]); return; } const i = VARS.findIndex((x) => x[0] === VARIANT); VARIANT = VARS[(i + d + VARS.length) % VARS.length][0]; applyVariant(); toast("EG-Variante " + VARS.find((x) => x[0] === VARIANT)[1]); }
 
@@ -571,9 +574,8 @@ function xrInput(dt) {
       } else if (Math.abs(sx) < 0.3) snapReady = true;
     }
     const b = gp.buttons; const key = src.handedness;
-    const pressed = !!(b[4] && b[4].pressed); if (pressed && !btnPrev[key]) nextVariant(1); btnPrev[key] = pressed;
-    const p5 = !!(b[5] && b[5].pressed); if (p5 && !btnPrev[key + "5"]) nextGR(); btnPrev[key + "5"] = p5;
-    const p3 = !!(b[3] && b[3].pressed); if (p3 && !btnPrev[key + "3"]) nextKueche(); btnPrev[key + "3"] = p3;
+    const pressed = !!(b[4] && b[4].pressed); if (pressed && !btnPrev[key]) nextSp(); btnPrev[key] = pressed;          // A/X: Hochschrank-Kombi
+    const p5 = !!(b[5] && b[5].pressed); if (p5 && !btnPrev[key + "5"]) nextBad(); btnPrev[key + "5"] = p5;         // B/Y: Küchentiefe
     if (src.handedness === "left") measureLive(...ctrlRay(c));
   }
 }
